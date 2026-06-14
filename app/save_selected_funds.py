@@ -1,8 +1,9 @@
 import requests
+import jdatetime
 from datetime import datetime, timedelta
 
 from app.db import SessionLocal, Base, engine
-from app.models import ClosingPriceDaily
+from app.models import ClosingPriceDaily, Fund
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
@@ -10,7 +11,6 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-# نام صندوق -> insCode
 FUNDS = {
     "گوهر": "12390706505809150",
     "زر": "33254899395816171",
@@ -19,6 +19,20 @@ FUNDS = {
     "صباح": "41013876011050911",
     "طلا": "46700660505281786",
 }
+
+
+def _upsert_fund(db, name: str, ins_code: str) -> bool:
+    existing = db.query(Fund).filter_by(ins_code=str(ins_code)).first()
+    if existing:
+        if existing.name != name:
+            existing.name = name
+        return False
+
+    db.add(Fund(
+        name=name,
+        ins_code=str(ins_code),
+    ))
+    return True
 
 
 def to_float(value):
@@ -30,7 +44,12 @@ def to_float(value):
         return None
 
 
-def save_closing_price_daily(ins_code: str, name: str, days: int = 7):
+def jalali_str_to_gregorian(date_str: str):
+    y, m, d = int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8])
+    return jdatetime.date(y, m, d).togregorian()
+
+
+def save_closing_price_daily(ins_code: str, name: str, days: int = 365):
     url = f"https://cdn.tsetmc.com/api/ClosingPrice/GetClosingPriceDailyList/{ins_code}/0"
     r = requests.get(url, headers=HEADERS, timeout=15)
     r.raise_for_status()
@@ -44,12 +63,18 @@ def save_closing_price_daily(ins_code: str, name: str, days: int = 7):
     try:
         saved = 0
         skipped = 0
+        invalid = 0
         for rec in records:
             date_str = str(rec.get("dEven", ""))
             if len(date_str) != 8:
                 continue
 
-            rec_date = datetime.strptime(date_str, "%Y%m%d").date()
+            try:
+                rec_date = jalali_str_to_gregorian(date_str)
+            except ValueError:
+                invalid += 1
+                continue
+
             if rec_date < cutoff:
                 continue
 
@@ -75,7 +100,7 @@ def save_closing_price_daily(ins_code: str, name: str, days: int = 7):
             saved += 1
 
         db.commit()
-        print(f"[{name}] Saved: {saved} | Skipped (already existed): {skipped}")
+        print(f"[{name}] Saved: {saved} | Skipped (already existed): {skipped} | Invalid dates: {invalid}")
     except Exception as e:
         db.rollback()
         print(f"[{name}] ❌ Error: {e}")
@@ -84,8 +109,18 @@ def save_closing_price_daily(ins_code: str, name: str, days: int = 7):
 
 
 if __name__ == "__main__":
-    # make sure tables exist
     Base.metadata.create_all(bind=engine)
 
     for name, ins_code in FUNDS.items():
-        save_closing_price_daily(ins_code, name, days=7)
+        db = SessionLocal()
+        try:
+            inserted = _upsert_fund(db, name=name, ins_code=ins_code)
+            db.commit()
+            print(f"[{name}] Fund {'inserted' if inserted else 'already existed'}")
+        except Exception as e:
+            db.rollback()
+            print(f"[{name}] ❌ Fund save error: {e}")
+        finally:
+            db.close()
+
+        save_closing_price_daily(ins_code, name, days=365)

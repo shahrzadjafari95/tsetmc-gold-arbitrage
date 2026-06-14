@@ -1,49 +1,34 @@
 from sqlalchemy.orm import Session
-
 from app.db import SessionLocal
 from app.models import ClosingPriceDaily, Fund, FundSnapshot
-from app.tsetmc import get_closing_price_history, get_fund_nav_history, get_funds
+from app.tsetmc import get_closing_price_history, get_etf_nav_today
 
-GOLD_FUND_KEYWORDS = [
-    "طلا", "زر", "درنا", "گلد", "مثقال",
-    "عیار", "گنج", "زمرد", "نفیس", "رزگلد", "مفید",
-]
+# Hardcoded gold funds — insCode verified from TSETMC
+GOLD_FUNDS = {
+    "گوهر":  "12390706505809150",
+    "زر":    "33254899395816171",
+    "عیار":  "34144395039913458",
+    "کهربا": "25559236668122210",
+    "گلدیس":  "68376789401977331",
+    "طلا":   "46700660505281786",
+}
 
 
-def is_gold_fund(name: str) -> bool:
-    return bool(name) and any(k in name for k in GOLD_FUND_KEYWORDS)
-
-
-# -------------------------
-# UPSERT HELPERS
-# -------------------------
-
-def _upsert_fund(db: Session, name: str, ins_code: str, reg_no) -> None:
-    """Insert fund metadata if it doesn't already exist."""
+def _upsert_fund(db: Session, name: str, ins_code: str) -> None:
     existing = db.query(Fund).filter_by(ins_code=ins_code).first()
     if not existing:
-        db.add(Fund(
-            name=name,
-            ins_code=ins_code,
-            reg_no=int(reg_no) if reg_no else None,
-        ))
+        db.add(Fund(name=name, ins_code=ins_code))
 
 
-def _save_nav_snapshot(db: Session, ins_code: str, reg_no, item: dict) -> bool:
-    """
-    Insert a FundSnapshot row for one NAV record.
-    Returns True if inserted, False if it already existed.
-    """
+def _save_nav_snapshot(db: Session, ins_code: str, item: dict) -> bool:
     exists = db.query(FundSnapshot).filter_by(
         fund_ins_code=ins_code,
         record_date=item["date"],
     ).first()
     if exists:
         return False
-
     db.add(FundSnapshot(
         fund_ins_code=ins_code,
-        reg_no=int(reg_no) if reg_no else None,
         record_date=item["date"],
         nav_sub=item["nav_sub"],
         nav_red=item["nav_red"],
@@ -55,17 +40,12 @@ def _save_nav_snapshot(db: Session, ins_code: str, reg_no, item: dict) -> bool:
 
 
 def _save_closing_price(db: Session, ins_code: str, item: dict) -> bool:
-    """
-    Insert a ClosingPriceDaily row for one record.
-    Returns True if inserted, False if it already existed.
-    """
     exists = db.query(ClosingPriceDaily).filter_by(
         ins_code=ins_code,
         record_date=item["date"],
     ).first()
     if exists:
         return False
-
     db.add(ClosingPriceDaily(
         ins_code=ins_code,
         record_date=item["date"],
@@ -80,37 +60,23 @@ def _save_closing_price(db: Session, ins_code: str, item: dict) -> bool:
     return True
 
 
-# -------------------------
-# MAIN SCRAPER
-# -------------------------
-
-def _process_fund(db: Session, fund: dict, days: int) -> None:
-    """Process a single fund: upsert metadata, save NAV + closing price history."""
-    name = fund.get("mfName", "")
-    ins_code = fund.get("insCode")
-    reg_no = fund.get("regNo")
-
-    if not ins_code:
-        print(f"  ⚠️  No insCode for '{name}', skipping")
-        return
-
-    ins_code = str(ins_code)
+def _process_fund(db: Session, name: str, ins_code: str, days: int) -> None:
     print(f"\n📦 Processing: {name} | insCode: {ins_code}")
 
-    # --- Fund metadata ---
-    _upsert_fund(db, name=name, ins_code=ins_code, reg_no=reg_no)
+    _upsert_fund(db, name=name, ins_code=ins_code)
 
-    # --- NAV history ---
+    # Today's NAV — non-fatal, some funds may not support ETF NAV endpoint
     try:
-        nav_records = get_fund_nav_history(ins_code, days=days)
-        print(f"  📅 NAV records: {len(nav_records)}")
-        inserted = sum(_save_nav_snapshot(db, ins_code, reg_no, r) for r in nav_records)
-        print(f"  ✅ NAV inserted: {inserted} | skipped: {len(nav_records) - inserted}")
+        nav = get_etf_nav_today(ins_code)
+        if nav:
+            inserted = _save_nav_snapshot(db, ins_code, nav)
+            print(f"  ✅ NAV today: nav_red={nav['nav_red']} | nav_sub={nav['nav_sub']} | {'inserted' if inserted else 'already existed'}")
+        else:
+            print(f"  ⚠️ No NAV data returned")
     except Exception as e:
-        print(f"  ❌ NAV fetch error: {e}")
-        raise  # bubble up so the outer try/except can rollback
+        print(f"  ⚠️ NAV skipped: {e}")  # non-fatal
 
-    # --- Closing price history ---
+    # Closing price history — fatal if fails
     try:
         cp_records = get_closing_price_history(ins_code, days=days)
         print(f"  📅 Closing price records: {len(cp_records)}")
@@ -118,25 +84,19 @@ def _process_fund(db: Session, fund: dict, days: int) -> None:
         print(f"  ✅ Closing price inserted: {inserted} | skipped: {len(cp_records) - inserted}")
     except Exception as e:
         print(f"  ❌ Closing price fetch error: {e}")
-        raise  # bubble up so the outer try/except can rollback
+        raise
 
 
-def run_scraper(days: int = 7) -> None:
-    data = get_funds()
-    funds = data.get("funds", [])
-    gold_funds = [f for f in funds if is_gold_fund(f.get("mfName", ""))]
+def run_scraper(days: int = 365) -> None:
+    print(f"Gold funds: {len(GOLD_FUNDS)}")
 
-    print(f"Total funds: {len(funds)}")
-    print(f"Gold funds found: {len(gold_funds)}")
-
-    for fund in gold_funds:
+    for name, ins_code in GOLD_FUNDS.items():
         db = SessionLocal()
         try:
-            _process_fund(db, fund, days)
+            _process_fund(db, name, ins_code, days)
             db.commit()
         except Exception as e:
             db.rollback()
-            name = fund.get("mfName", "unknown")
             print(f"  ❌ Rolled back changes for '{name}': {e}")
         finally:
             db.close()

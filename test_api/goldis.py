@@ -6,7 +6,7 @@ HEADERS = {
     "Accept": "application/json, text/plain, */*",
 }
 
-ins_code = "41013876011050911"  # صباح
+ins_code = "68376789401977331"  # گلدیس
 url = f"https://cdn.tsetmc.com/api/ClosingPrice/GetClosingPriceDailyList/{ins_code}/0"
 
 r = requests.get(url, headers=HEADERS, timeout=15)

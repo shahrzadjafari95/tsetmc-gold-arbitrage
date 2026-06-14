@@ -83,3 +83,54 @@ class ClosingPriceDaily(Base):
     raw_data = Column(JSON, nullable=False)
 
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+    # -------------------------
+# GOLD PRICE (XAU/USD)
+# -------------------------
+class GoldPrice(Base):
+    __tablename__ = "gold_prices"
+    __table_args__ = (
+        UniqueConstraint("record_date", name="uq_gold_price_date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    record_date = Column(Date, index=True, nullable=False)
+    xau_usd = Column(Float)  # XAU/USD spot price
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+# -------------------------
+# حباب روزانه
+# -------------------------
+class FundBubble(Base):
+    __tablename__ = "fund_bubbles"
+    __table_args__ = (
+        UniqueConstraint("fund_ins_code", "record_date", name="uq_bubble_fund_date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    fund_ins_code = Column(String, index=True, nullable=False)
+    fund_name = Column(String)
+    record_date = Column(Date, index=True, nullable=False)
+    nav_red = Column(Float)       # NAV ابطال
+    price_last = Column(Float)    # قیمت بازار
+    bubble_pct = Column(Float)    # حباب درصد = (price/nav - 1) * 100
+    created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+# -------------------------
+# COIN PRICE (سکه بهار آزادی)
+# -------------------------
+class CoinPrice(Base):
+    __tablename__ = "coin_prices"
+    __table_args__ = (
+        UniqueConstraint("record_date", name="uq_coin_price_date"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    record_date = Column(Date, index=True, nullable=False)
+    price = Column(Float)        # قیمت لحظه‌ای (ریال)
+    price_high = Column(Float)   # بالاترین روز
+    price_low = Column(Float)    # پایین‌ترین روز
+    created_at = Column(DateTime(timezone=True), default=_utcnow)

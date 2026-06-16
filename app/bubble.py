@@ -26,12 +26,13 @@ def calculate_and_save_bubbles():
                 missed += 1
                 continue
 
-            if not snapshot.nav_red or not closing.price_last:
+            if not snapshot.nav_red or not closing.p_closing:
                 print(f"  ⚠️ [{fund.name}] Missing values: nav_red={snapshot.nav_red} price_last={closing.price_last}")
                 missed += 1
                 continue
 
-            bubble_pct = (closing.price_last / snapshot.nav_red - 1) * 100
+            bubble_pct = ((closing.p_closing - snapshot.nav_red) / snapshot.nav_red) * 100
+
             target_date = closing.record_date
 
             exists = db.query(FundBubble).filter_by(
@@ -48,7 +49,7 @@ def calculate_and_save_bubbles():
                     fund_name=fund.name,
                     record_date=target_date,
                     nav_red=snapshot.nav_red,
-                    price_last=closing.price_last,
+                    price_last=closing.p_closing,
                     bubble_pct=bubble_pct,
                 ))
                 saved += 1

@@ -21,8 +21,6 @@ if __name__ == "__main__":
     print("\n=== 4. Calculating bubbles ===")
     calculate_and_save_bubbles()
 
-
-    
     print("\n=== 5. Live price right now ===")
     print(get_xau_usd_now()) 
 

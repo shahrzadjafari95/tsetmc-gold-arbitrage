@@ -50,3 +50,23 @@ def save_xau_usd(days: int = 365):
         print(f"[XAU/USD] ❌ Error: {e}")
     finally:
         db.close()
+
+
+def get_xau_usd_now() -> float | None:
+    """Fetch live current XAU/USD price."""
+
+    ticker = yf.Ticker("GC=F")
+    price = ticker.fast_info.last_price
+    return round(float(price), 2) if price else None
+
+
+def get_xau_usd_latest_from_db() -> dict | None:
+    """Get the most recent XAU/USD price saved in DB."""
+    db = SessionLocal()
+    try:
+        row = db.query(GoldPrice).order_by(GoldPrice.record_date.desc()).first()
+        if row:
+            return {"date": row.record_date, "xau_usd": row.xau_usd}
+        return None
+    finally:
+        db.close()

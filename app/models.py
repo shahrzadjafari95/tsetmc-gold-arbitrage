@@ -134,3 +134,23 @@ class CoinPrice(Base):
     price_high = Column(Float)   # بالاترین روز
     price_low = Column(Float)    # پایین‌ترین روز
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+
+
+# -------------------------
+# TRANSACTION DATA (BrsApi)
+# -------------------------
+class FundTransaction(Base):
+    __tablename__ = "fund_transactions"
+    __table_args__ = (
+        UniqueConstraint("fund_name", "record_date", "row", name="uq_transaction_fund_date_row"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    fund_name = Column(String, index=True, nullable=False)
+    record_date = Column(Date, index=True, nullable=False)
+    row = Column(Integer, nullable=False)
+    time = Column(String)
+    volume = Column(Float)
+    price = Column(Float)
+    canceled = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), default=_utcnow)

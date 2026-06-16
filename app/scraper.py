@@ -2,17 +2,9 @@ from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import ClosingPriceDaily, Fund, FundSnapshot
 from app.tsetmc import get_closing_price_history, get_etf_nav_today
+from app.gold_funds import GOLD_FUNDS
 
 # Hardcoded gold funds — insCode verified from TSETMC
-GOLD_FUNDS = {
-    "گوهر":  "12390706505809150",
-    "زر":    "33254899395816171",
-    "عیار":  "34144395039913458",
-    "کهربا": "25559236668122210",
-    "گلدیس":  "68376789401977331",
-    "طلا":   "46700660505281786",
-}
-
 
 def _upsert_fund(db: Session, name: str, ins_code: str) -> None:
     existing = db.query(Fund).filter_by(ins_code=ins_code).first()

@@ -1,34 +1,32 @@
+from app.brspi import save_fund_live_data
+from app.client_type_scraper import run_fund_live_scraper
 from app.db import Base, engine
 from app.scraper import run_scraper
-from app.gold_price import save_xau_usd, get_xau_usd_latest_from_db, get_xau_usd_now
-from app.bubble import calculate_and_save_bubbles
-from app.coin_price import save_coin_price
+from app.emami_price import save_emami_price
+from app.gold18k_price import save_gold_18k_price
+from app.bubble_calc import calc_and_save_bubbles
 from app.transactions import run_transactions_scraper
-
 
 if __name__ == "__main__":
     Base.metadata.create_all(bind=engine)
 
-    print("=== 1. Scraping fund NAV + closing prices ===")
+    print("=== 1. Fund NAV + closing prices (tsetmc) ===")
     run_scraper(days=365)
 
-    print("\n=== 2. Fetching XAU/USD ===")
-    save_xau_usd(days=365)
+    print("\n=== 2. قیمت طلای ۱۸ عیار ===")
+    save_gold_18k_price()
 
-    print("\n=== 3. سکه بهار آزادی ===")
-    save_coin_price()
+    print("\n=== 3. قیمت سکه امامی ===")
+    save_emami_price()
 
-    print("\n=== 4. Calculating bubbles ===")
-    calculate_and_save_bubbles()
+    print("\n=== 4. حباب صندوق‌ها ===")
+    calc_and_save_bubbles()
 
-    print("\n=== 5. Live price right now ===")
-    print(get_xau_usd_now()) 
+    print("\n=== 5. Live data امروز (BrsApi) ===")
+    save_fund_live_data()
 
-    # Latest saved in DB
-    print("\n=== 6. Latest saved in DB ===")
-    row = get_xau_usd_latest_from_db()
-    print(f"{row['date'].strftime('%Y-%m-%d')} | {row['xau_usd']}")
+    print("\n=== 6. تاریخچه حقیقی/حقوقی (algotik) ===")
+    run_fund_live_scraper()
 
-    # add at the end:
-    print("\n=== 5. Fetching fund transactions ===")
+    print("\n=== 7. ریز معاملات ===")
     run_transactions_scraper(days=1)

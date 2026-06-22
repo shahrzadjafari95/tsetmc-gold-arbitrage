@@ -99,7 +99,7 @@ def get_trading_days(start: date, end: date) -> list[date]:
     return days
 
 
-def run_history_scraper(days_back: int = 365):
+def run_history_scraper(days_back: int = 10):
     """Fetch historical fund data for past N days."""
     end_date   = date.today() - timedelta(days=1)  # yesterday
     start_date = end_date - timedelta(days=days_back)
@@ -121,6 +121,18 @@ def run_history_scraper(days_back: int = 365):
             ).count()
             if existing_count >= len(GOLD_FUNDS):
                 print(f"⏭️  already complete ({existing_count} records)")
+                rows = (
+                    db.query(FundLiveData)
+                    .filter_by(record_date=target_date)
+                    .order_by(FundLiveData.ins_code)
+                    .all()
+                )
+                preview = ", ".join(
+                    f"{r.ins_code}:{(r.p_closing or 0):,.0f}"
+                    for r in rows[:8]
+                )
+                if preview:
+                    print(f"   📌 sample rows: {preview}")
                 total_skipped += existing_count
                 continue
 
@@ -130,7 +142,9 @@ def run_history_scraper(days_back: int = 365):
                     print("⚠️  no data returned")
                     continue
 
-                print(f"✅ {len(all_funds)} funds received")
+                matched = sum(1 for _, ins_code in GOLD_FUNDS.items() if find_fund(all_funds, ins_code))
+                print(f"✅ {len(all_funds)} funds received from API")
+                print(f"✅ {matched} tracked funds matched in API")
 
                 day_inserted = day_skipped = 0
 
@@ -157,6 +171,10 @@ def run_history_scraper(days_back: int = 365):
                 total_skipped  += day_skipped
                 print(f"   💾 inserted: {day_inserted} | skipped: {day_skipped}")
 
+                if matched < len(GOLD_FUNDS):
+                    missing = [name for name, ins_code in GOLD_FUNDS.items() if not find_fund(all_funds, ins_code)]
+                    print(f"   ⚠️  missing tracked funds: {', '.join(missing)}")
+
                 # Be polite to the API — don't hammer it
                 time.sleep(0.5)
 
@@ -173,6 +191,11 @@ def run_history_scraper(days_back: int = 365):
     print(f"✅ Total inserted : {total_inserted}")
     print(f"⏭️  Total skipped  : {total_skipped}")
     print(f"❌ Total errors   : {total_errors}")
+
+
+def save_history(days_back: int = 365):
+    """Backward-compatible alias for the history scraper."""
+    return run_history_scraper(days_back=days_back)
 
 
 if __name__ == "__main__":

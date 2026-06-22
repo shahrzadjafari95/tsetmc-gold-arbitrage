@@ -61,14 +61,8 @@ class FundTransaction(Base):
     created_at = Column(DateTime(timezone=True), default=_utcnow)
 
 
-# ── ادغام ClientTypeDaily + FundLiveData ─────────────────────
-# FundLiveData = snapshot لحظه‌ای امروز از BrsApi (قیمت + حقیقی/حقوقی)
-# ClientTypeDaily = تاریخچه حقیقی/حقوقی از algotik (ارزش کامل + per capita)
-# این دو جدول جداگانه نگه داشته می‌شوند چون منبع و granularity متفاوت دارند
-# ─────────────────────────────────────────────────────────────
-
 class FundLiveData(Base):
-    """snapshot روزانه از BrsApi — قیمت + حجم + حقیقی/حقوقی (بدون ارزش ریالی)"""
+    """snapshot روزانه از BrsApi — قیمت + حجم + حقیقی/حقوقی"""
     __tablename__ = "fund_live_data"
     __table_args__ = (UniqueConstraint("ins_code", "record_date", name="uq_live_ins_date"),)
 
@@ -102,43 +96,10 @@ class FundLiveData(Base):
     sell_vol_i = Column(Float)
     sell_vol_n = Column(Float)
 
-    # computed — بر اساس حجم (چون value از BrsApi نیست)
+    # computed — بر اساس حجم
     buy_per_capita_i = Column(Float)
     sell_per_capita_i = Column(Float)
     net_individual_flow = Column(Float)   # buy_vol_i - sell_vol_i
-
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-
-class ClientTypeDaily(Base):
-    """تاریخچه کامل حقیقی/حقوقی از algotik — شامل ارزش ریالی و per capita دقیق"""
-    __tablename__ = "client_type_daily"
-    __table_args__ = (UniqueConstraint("ins_code", "record_date", name="uq_ct_ins_date"),)
-
-    id = Column(Integer, primary_key=True)
-    ins_code = Column(String, index=True, nullable=False)
-    record_date = Column(Date, index=True, nullable=False)
-
-    # حقیقی
-    buy_i_volume = Column(Float)
-    buy_i_value = Column(Float)       # ارزش ریالی — فقط از algotik موجود است
-    buy_i_count = Column(Integer)
-    sell_i_volume = Column(Float)
-    sell_i_value = Column(Float)
-    sell_i_count = Column(Integer)
-
-    # حقوقی
-    buy_n_volume = Column(Float)
-    buy_n_value = Column(Float)
-    buy_n_count = Column(Integer)
-    sell_n_volume = Column(Float)
-    sell_n_value = Column(Float)
-    sell_n_count = Column(Integer)
-
-    # computed
-    buy_i_per_capita = Column(Float)
-    sell_i_per_capita = Column(Float)
-    net_individual_flow = Column(Float)   # buy_i_value - sell_i_value (ریالی)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 

@@ -1,5 +1,5 @@
-from app.brspi import save_fund_live_data
-from app.client_type_scraper import run_fund_live_scraper
+from app.brspi import save_today
+from app.brspi_history import run_history_scraper
 from app.db import Base, engine
 from app.scraper import run_scraper
 from app.emami_price import save_emami_price
@@ -23,10 +23,10 @@ if __name__ == "__main__":
     calc_and_save_bubbles()
 
     print("\n=== 5. Live data امروز (BrsApi) ===")
-    save_fund_live_data()
+    save_today()
 
-    print("\n=== 6. تاریخچه حقیقی/حقوقی (algotik) ===")
-    run_fund_live_scraper()
+    print("\n=== 6. تاریخچه حقیقی/حقوقی (BrsApi history) ===")
+    run_history_scraper(days_back=365)
 
     print("\n=== 7. ریز معاملات ===")
     run_transactions_scraper(days=1)

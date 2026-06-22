@@ -1,100 +1,199 @@
-# view_data.py
+from __future__ import annotations
+
+import argparse
 from datetime import date
+
 from app.db import SessionLocal
-from app.models import ClosingPriceDaily, Fund, FundSnapshot, FundBubble, EmamiCoinPrice, GoldPrice18K
+from app.gold_funds import GOLD_FUNDS
+from app.models import (
+    ClosingPriceDaily,
+    EmamiCoinPrice,
+    Fund,
+    FundBubble,
+    FundLiveData,
+    FundSnapshot,
+    GoldPrice18K,
+)
 
-db = SessionLocal()
 
-# ─────────────────────────────────────────
-# 1. FUNDS
-# ─────────────────────────────────────────
-print("\n=== Funds ===")
-funds = db.query(Fund).all()
-code_to_name = {f.ins_code: f.name for f in funds}
-for f in funds:
-    print(f"  {f.name} | {f.ins_code}")
-
-# ─────────────────────────────────────────
-# 2. CLOSING PRICES (latest 3 per fund)
-# ─────────────────────────────────────────
-print("\n=== Closing Price (latest 3 per fund) ===")
-for f in funds:
-    rows = (
-        db.query(ClosingPriceDaily)
-        .filter_by(ins_code=f.ins_code)
-        .order_by(ClosingPriceDaily.record_date.desc())
-        .limit(3)
-        .all()
+def _parse_args() -> date:
+    parser = argparse.ArgumentParser(description="Inspect saved market data for a specific date.")
+    parser.add_argument(
+        "--date",
+        dest="target_date",
+        help="Target date in YYYY-MM-DD format. Defaults to today.",
     )
-    for r in rows:
-        raw = r.raw_data or {}
-        print(
-            f"  [{f.name}] {r.record_date} | "
-            f"پایانی={r.p_closing:,.0f} | "
-            f"اولیه={raw.get('priceFirst', '-')} | "
-            f"بالا={raw.get('priceMax', '-')} | "
-            f"پایین={raw.get('priceMin', '-')} | "
-            f"دیروز={raw.get('priceYesterday', '-')} | "
-            f"آخرین={r.price_last:,.0f}"
-        )
+    args = parser.parse_args()
+    if not args.target_date:
+        return date.today()
+    return date.fromisoformat(args.target_date)
 
-# ─────────────────────────────────────────
-# 3. NAV SNAPSHOTS (latest per fund)
-# ─────────────────────────────────────────
-print("\n=== NAV Snapshots (latest per fund) ===")
-for f in funds:
-    r = (
-        db.query(FundSnapshot)
-        .filter_by(fund_ins_code=f.ins_code)
-        .order_by(FundSnapshot.record_date.desc())
+
+def _latest_on_or_before(query, model, field, target_date: date):
+    return (
+        query.filter(field <= target_date)
+        .order_by(field.desc())
         .first()
     )
-    if r:
-        print(f"  [{f.name}] {r.record_date} | nav_red={r.nav_red:,.0f} | nav_sub={r.nav_sub:,.0f}")
 
-# ─────────────────────────────────────────
-# 4. طلای ۱۸ عیار (latest 5)
-# ─────────────────────────────────────────
-print("\n=== طلای ۱۸ عیار (latest 5) ===")
-for r in db.query(GoldPrice18K).order_by(GoldPrice18K.record_date.desc()).limit(5).all():
-    print(
-        f"  {r.record_date} | "
-        f"XAU/USD={r.xau_usd:,.2f} | "
-        f"دلار={r.usd_irr:,.0f} | "
-        f"۱۸عیار/گرم={r.gold_18k_irr:,.0f}"
+
+target_date = _parse_args()
+db = SessionLocal()
+code_to_name = {f.ins_code: f.name for f in db.query(Fund).all()}
+
+try:
+    # ─────────────────────────────────────────
+    # 1. قیمت‌های پایه برای تاریخ انتخابی
+    # ─────────────────────────────────────────
+    print("\n" + "═" * 60)
+    print(f"💰 قیمت‌های پایه — {target_date}")
+    print("═" * 60)
+
+    gold = db.query(GoldPrice18K).filter_by(record_date=target_date).first()
+    if not gold:
+        gold = _latest_on_or_before(db.query(GoldPrice18K), GoldPrice18K, GoldPrice18K.record_date, target_date)
+
+    emami = db.query(EmamiCoinPrice).filter_by(record_date=target_date).first()
+    if not emami:
+        emami = _latest_on_or_before(db.query(EmamiCoinPrice), EmamiCoinPrice, EmamiCoinPrice.record_date, target_date)
+
+    if gold:
+        print(f"  طلای جهانی   : ${gold.xau_usd:,.2f} / oz  | تاریخ: {gold.record_date}")
+        print(f"  نرخ دلار     : {gold.usd_irr:,.0f} IRR")
+        print(f"  طلای ۱۸ عیار : {gold.gold_18k_irr:,.0f} IRR/gram")
+        if gold.record_date != target_date:
+            print(f"  ℹ️  used latest available on or before {target_date}")
+    else:
+        print("  ⚠️  No gold price data")
+
+    if emami:
+        print(f"  سکه امامی    : {emami.price:,.0f} IRR  | تاریخ: {emami.record_date}")
+        if emami.record_date != target_date:
+            print(f"  ℹ️  used latest available on or before {target_date}")
+    else:
+        print("  ⚠️  No Emami price data")
+
+    # ─────────────────────────────────────────
+    # 2. حباب برای تاریخ انتخابی
+    # ─────────────────────────────────────────
+    print("\n" + "═" * 60)
+    print(f"📊 حباب صندوق‌های طلا — {target_date}")
+    print("═" * 60)
+
+    bubbles = (
+        db.query(FundBubble)
+        .filter_by(record_date=target_date)
+        .order_by(FundBubble.nominal_bubble_pct.desc())
+        .all()
     )
 
-# ─────────────────────────────────────────
-# 5. BUBBLES (today)
-# ─────────────────────────────────────────
-print(f"\n=== Bubbles — {date.today()} ===")
-rows = (
-    db.query(FundBubble)
-    .filter_by(record_date=date.today())
-    .order_by(FundBubble.nominal_bubble_pct.desc())
-    .all()
-)
-if not rows:
-    print("  No bubble data for today — run run_all.py first")
-else:
-    print(f"  {'صندوق':<15} {'قیمت بازار':>12} {'NAV ابطال':>12} {'اسمی':>8} {'واقعی':>8} {'ذاتی':>8}")
-    print("  " + "-" * 68)
-    for r in rows:
-        name = code_to_name.get(r.fund_ins_code, r.fund_ins_code)
+    if not bubbles:
+        print("  ⚠️  No bubble data for this date — run bubble_calc.py for the same date context")
+    else:
+        print(f"  {'صندوق':<15} {'قیمت بازار':>12} {'NAV ابطال':>12} {'اسمی':>8} {'واقعی':>8} {'ذاتی':>8}")
+        print("  " + "─" * 68)
+        for r in bubbles:
+            name = code_to_name.get(r.fund_ins_code, r.fund_ins_code)
+            print(
+                f"  {name:<15} "
+                f"{r.market_price:>12,.0f} "
+                f"{r.nav_red:>12,.0f} "
+                f"{r.nominal_bubble_pct:>+7.2f}% "
+                f"{r.real_bubble_pct:>+7.2f}% "
+                f"{r.intrinsic_bubble_pct:>+7.2f}%"
+            )
+
+    # ─────────────────────────────────────────
+    # 3. Live data برای تاریخ انتخابی
+    # ─────────────────────────────────────────
+    print("\n" + "═" * 60)
+    print(f"💸 Live Data — حقیقی/حقوقی | {target_date}")
+    print("═" * 60)
+
+    live_rows = (
+        db.query(FundLiveData)
+        .filter_by(record_date=target_date)
+        .order_by(FundLiveData.net_individual_flow.desc())
+        .all()
+    )
+
+    if not live_rows:
+        print("  ⚠️  No live data for this date")
+    else:
+        print(f"  {'صندوق':<12} {'پایانی':>10} {'خ.حقیقی':>12} {'ف.حقیقی':>12} {'خ.حقوقی':>10} {'ف.حقوقی':>10} {'جریان(B)':>10}")
+        print("  " + "─" * 80)
+        for r in live_rows:
+            name = code_to_name.get(r.ins_code, r.ins_code)
+            flow_b = (r.net_individual_flow or 0) / 1e9
+            print(
+                f"  {name:<12} "
+                f"{(r.p_closing or 0):>10,.0f} "
+                f"{(r.buy_vol_i or 0):>12,.0f} "
+                f"{(r.sell_vol_i or 0):>12,.0f} "
+                f"{(r.buy_vol_n or 0):>10,.0f} "
+                f"{(r.sell_vol_n or 0):>10,.0f} "
+                f"{flow_b:>+10.2f}"
+            )
+
+    # ─────────────────────────────────────────
+    # 4. تاریخچه حقیقی/حقوقی — آخرین رکورد تا تاریخ انتخابی
+    # ─────────────────────────────────────────
+    print("\n" + "═" * 60)
+    print(f"📅 آخرین رکورد FundLiveData تا {target_date}")
+    print("═" * 60)
+
+    for name, ins_code in GOLD_FUNDS.items():
+        r = (
+            db.query(FundLiveData)
+            .filter(FundLiveData.ins_code == ins_code)
+            .filter(FundLiveData.record_date <= target_date)
+            .order_by(FundLiveData.record_date.desc())
+            .first()
+        )
+        if not r:
+            continue
+        flow_b = (r.net_individual_flow or 0) / 1e9
         print(
-            f"  {name:<15} "
-            f"{r.market_price:>12,.0f} "
-            f"{r.nav_red:>12,.0f} "
-            f"{r.nominal_bubble_pct:>+7.2f}% "
-            f"{r.real_bubble_pct:>+7.2f}% "
-            f"{r.intrinsic_bubble_pct:>+7.2f}%"
+            f"  {name:<12} {r.record_date} | "
+            f"پایانی={r.p_closing or 0:,.0f} | "
+            f"خرید حقیقی={r.buy_vol_i or 0:,.0f} | "
+            f"فروش حقیقی={r.sell_vol_i or 0:,.0f} | "
+            f"خرید حقوقی={r.buy_vol_n or 0:,.0f} | "
+            f"فروش حقوقی={r.sell_vol_n or 0:,.0f} | "
+            f"جریان={flow_b:+.2f}B"
         )
 
-# ─────────────────────────────────────────
-# 6. سکه امامی (latest 5)
-# ─────────────────────────────────────────
-print("\n=== سکه امامی (latest 5) ===")
-for r in db.query(EmamiCoinPrice).order_by(EmamiCoinPrice.record_date.desc()).limit(5).all():
-    print(f"  {r.record_date} | قیمت={r.price:,.0f} IRR")
+    # ─────────────────────────────────────────
+    # 5. NAV + closing price برای تاریخ انتخابی
+    # ─────────────────────────────────────────
+    print("\n" + "═" * 60)
+    print(f"📈 NAV + قیمت پایانی — تا {target_date}")
+    print("═" * 60)
 
-db.close()
+    funds = db.query(Fund).all()
+    for f in funds:
+        snap = (
+            db.query(FundSnapshot)
+            .filter(FundSnapshot.fund_ins_code == f.ins_code)
+            .filter(FundSnapshot.record_date <= target_date)
+            .order_by(FundSnapshot.record_date.desc())
+            .first()
+        )
+        closing = (
+            db.query(ClosingPriceDaily)
+            .filter(ClosingPriceDaily.ins_code == f.ins_code)
+            .filter(ClosingPriceDaily.record_date <= target_date)
+            .order_by(ClosingPriceDaily.record_date.desc())
+            .first()
+        )
+        if snap and closing:
+            bubble = ((closing.p_closing - snap.nav_red) / snap.nav_red * 100) if snap.nav_red else 0
+            print(
+                f"  {f.name:<12} "
+                f"NAV={snap.nav_red:>10,.0f} | "
+                f"اخرین قیمت بازار={closing.p_closing:>10,.0f} | "
+                f"حباب={bubble:>+6.2f}%  | "
+                f"تاریخ={closing.record_date}"
+            )
+finally:
+    db.close()

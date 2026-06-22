@@ -162,7 +162,6 @@ These are defined in [`app/models.py`](/Users/shahrzadjafari/Desktop/tsetmc-scra
 | `closing_price_daily` | Daily closing price history per fund |
 | `fund_transactions` | Fund transaction rows |
 | `fund_live_data` | Daily live snapshot from BrsApi |
-| `client_type_daily` | Historical client type data |
 | `emami_coin_prices` | Emami coin price history |
 | `gold_prices_18k` | Gold 18K price history |
 | `fund_bubbles` | Bubble metrics per fund per day |

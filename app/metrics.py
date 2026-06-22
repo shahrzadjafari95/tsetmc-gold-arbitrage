@@ -5,7 +5,7 @@ Calculated metrics for gold ETF analysis:
 3. Rolling Volatility — 5, 20, 60-day annualized std of daily returns
 4. Correlation Matrix — between funds based on closing prices
 5. Fund/Coin Ratio   — fund market price vs سکه امامی
-6. Money Flow        — ورود/خروج پول حقیقی از ClientTypeDaily
+6. Money Flow        — ورود/خروج پول حقیقی از FundLiveData
 """
 
 import pandas as pd

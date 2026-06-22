@@ -166,17 +166,35 @@ def save_today() -> None:
             fund = _find_fund(all_funds, ins_code)
             if not fund:
                 continue
-            pc       = fund.get("pc") or 0
-            buy_i    = fund.get("Buy_I_Volume") or 0
-            sell_i   = fund.get("Sell_I_Volume") or 0
-            net_flow = (buy_i - sell_i) * pc / 1e9
-            print(
-                f"  🔄 {name}: "
-                f"پایانی={pc:,} | "
-                f"خرید={buy_i:,} | "
-                f"فروش={sell_i:,} | "
-                f"جریان={net_flow:+.2f}B"
-            )
+            parsed = _parse(fund, ins_code, today)
+            print(f"\n  🏷️  {name}")
+            rows = [
+                ("ins_code", "شناسه داخلی نماد", parsed["ins_code"]),
+                ("record_date", "تاریخ", parsed["record_date"]),
+                ("record_time", "زمان آخرین اطلاعات قیمت", parsed["record_time"]),
+                ("p_last", "آخرین قیمت", parsed["p_last"] or 0),
+                ("p_first", "اولین قیمت", parsed["p_first"] or 0),
+                ("p_min", "کمترین قیمت", parsed["p_min"] or 0),
+                ("p_max", "بیشترین قیمت", parsed["p_max"] or 0),
+                ("trade_count", "تعداد معاملات", parsed["trade_count"] or 0),
+                ("trade_volume", "حجم معاملات", parsed["trade_volume"] or 0),
+                ("trade_value", "ارزش معاملات", parsed["trade_value"] or 0),
+                ("buy_count_i", "تعداد خریدار حقیقی", parsed["buy_count_i"] or 0),
+                ("buy_count_n", "تعداد خریدار حقوقی", parsed["buy_count_n"] or 0),
+                ("sell_count_i", "تعداد فروشنده حقیقی", parsed["sell_count_i"] or 0),
+                ("sell_count_n", "تعداد فروشنده حقوقی", parsed["sell_count_n"] or 0),
+                ("buy_vol_i", "حجم خرید حقیقی", parsed["buy_vol_i"] or 0),
+                ("buy_vol_n", "حجم خرید حقوقی", parsed["buy_vol_n"] or 0),
+                ("sell_vol_i", "حجم فروش حقیقی", parsed["sell_vol_i"] or 0),
+                ("sell_vol_n", "حجم فروش حقوقی", parsed["sell_vol_n"] or 0),
+            ]
+
+            for key, fa_label, value in rows:
+                if isinstance(value, (int, float)):
+                    value_text = f"{value:,}"
+                else:
+                    value_text = str(value)
+                print(f"     {key:<13} | {fa_label:<28} | {value_text}")
 
         print(f"\n  💾 Saved: {inserted} | Updated: {updated} | Errors: {errors}")
         if matched < len(GOLD_FUNDS):

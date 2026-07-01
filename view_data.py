@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 from datetime import date
 
@@ -28,15 +26,6 @@ def _parse_args() -> date:
         return date.today()
     return date.fromisoformat(args.target_date)
 
-
-def _latest_on_or_before(query, model, field, target_date: date):
-    return (
-        query.filter(field <= target_date)
-        .order_by(field.desc())
-        .first()
-    )
-
-
 target_date = _parse_args()
 db = SessionLocal()
 code_to_name = {f.ins_code: f.name for f in db.query(Fund).all()}
@@ -50,26 +39,17 @@ try:
     print("═" * 60)
 
     gold = db.query(GoldPrice18K).filter_by(record_date=target_date).first()
-    if not gold:
-        gold = _latest_on_or_before(db.query(GoldPrice18K), GoldPrice18K, GoldPrice18K.record_date, target_date)
-
     emami = db.query(EmamiCoinPrice).filter_by(record_date=target_date).first()
-    if not emami:
-        emami = _latest_on_or_before(db.query(EmamiCoinPrice), EmamiCoinPrice, EmamiCoinPrice.record_date, target_date)
 
     if gold:
         print(f"  طلای جهانی   : ${gold.xau_usd:,.2f} / oz  | تاریخ: {gold.record_date}")
         print(f"  نرخ دلار     : {gold.usd_irr:,.0f} IRR")
         print(f"  طلای ۱۸ عیار : {gold.gold_18k_irr:,.0f} IRR/gram")
-        if gold.record_date != target_date:
-            print(f"  ℹ️  used latest available on or before {target_date}")
     else:
         print("  ⚠️  No gold price data")
 
     if emami:
         print(f"  سکه امامی    : {emami.price:,.0f} IRR  | تاریخ: {emami.record_date}")
-        if emami.record_date != target_date:
-            print(f"  ℹ️  used latest available on or before {target_date}")
     else:
         print("  ⚠️  No Emami price data")
 
@@ -88,7 +68,7 @@ try:
     )
 
     if not bubbles:
-        print("  ⚠️  No bubble data for this date — run bubble_calc.py for the same date context")
+        print("  ⚠️  No bubble data for this date — run bubble_calc.py after saving today's prices and today's fund data")
     else:
         print(f"  {'صندوق':<15} {'قیمت بازار':>12} {'NAV ابطال':>12} {'اسمی':>8} {'واقعی':>8} {'ذاتی':>8}")
         print("  " + "─" * 68)
@@ -174,16 +154,12 @@ try:
     for f in funds:
         snap = (
             db.query(FundSnapshot)
-            .filter(FundSnapshot.fund_ins_code == f.ins_code)
-            .filter(FundSnapshot.record_date <= target_date)
-            .order_by(FundSnapshot.record_date.desc())
+            .filter(FundSnapshot.fund_ins_code == f.ins_code, FundSnapshot.record_date == target_date)
             .first()
         )
         closing = (
             db.query(ClosingPriceDaily)
-            .filter(ClosingPriceDaily.ins_code == f.ins_code)
-            .filter(ClosingPriceDaily.record_date <= target_date)
-            .order_by(ClosingPriceDaily.record_date.desc())
+            .filter(ClosingPriceDaily.ins_code == f.ins_code, ClosingPriceDaily.record_date == target_date)
             .first()
         )
         if snap and closing:
@@ -192,8 +168,10 @@ try:
                 f"  {f.name:<12} "
                 f"NAV={snap.nav_red:>10,.0f} | "
                 f"اخرین قیمت بازار={closing.p_closing:>10,.0f} | "
-                f"حباب={bubble:>+6.2f}%  | "
+                f"حباب={bubble:>+6.2f}% | "
                 f"تاریخ={closing.record_date}"
             )
+        else:
+            print(f"  {f.name:<12} ⚠️  No exact NAV/closing data for {target_date}")
 finally:
     db.close()

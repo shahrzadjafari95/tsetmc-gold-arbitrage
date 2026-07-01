@@ -128,6 +128,18 @@ class GoldPrice18K(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
+class XAUUSDTradingView(Base):
+    """TradingView XAU/USD snapshot."""
+    __tablename__ = "xauusd_tradingview"
+    __table_args__ = (UniqueConstraint("symbol", "fetched_at", name="uq_xauusd_symbol_fetched_at"),)
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, nullable=False, default="XAUUSD", index=True)
+    price = Column(Float, nullable=False)
+    fetched_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
 class FundBubble(Base):
     __tablename__ = "fund_bubbles"
     __table_args__ = (UniqueConstraint("fund_ins_code", "record_date", name="uq_bubble_fund_date"),)
@@ -140,4 +152,27 @@ class FundBubble(Base):
     nominal_bubble_pct = Column(Float)
     real_bubble_pct = Column(Float)
     intrinsic_bubble_pct = Column(Float)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class UsdtPrice(Base):
+    """قیمت تتر از نوبیتکس — شامل last price و best bid/ask"""
+    __tablename__ = "usdt_prices"
+    __table_args__ = (UniqueConstraint("record_date", "record_time", name="uq_usdt_date_time"),)
+
+    id = Column(Integer, primary_key=True)
+    symbol = Column(String, default="USDTIRT", nullable=False)
+    record_date = Column(Date, index=True, nullable=False)
+    record_time = Column(String, nullable=False)      # HH:MM:SS
+
+    last_price = Column(Float)                        # lastTradePrice
+    best_bid = Column(Float)                          # bids[0][0]
+    best_ask = Column(Float)                          # asks[0][0]
+    bid_volume = Column(Float)                        # bids[0][1]
+    ask_volume = Column(Float)                        # asks[0][1]
+    spread = Column(Float)                            # best_ask - best_bid
+    spread_pct = Column(Float)                        # spread / best_ask * 100
+    fetched_at = Column(DateTime, nullable=False)     # UTC timestamp
+    api_last_update = Column(Float)                   # lastUpdate از API (epoch ms)
+
     created_at = Column(DateTime, default=datetime.datetime.utcnow)

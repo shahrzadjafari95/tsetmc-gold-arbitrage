@@ -36,22 +36,21 @@ def calc_and_save_bubbles():
         saved = 0
 
         for name, ins_code in GOLD_FUNDS.items():
-
             snap = (
                 db.query(FundSnapshot)
-                .filter_by(fund_ins_code=ins_code)
+                .filter_by(fund_ins_code=ins_code, record_date=today)
                 .order_by(FundSnapshot.record_date.desc())
                 .first()
             )
             closing = (
                 db.query(ClosingPriceDaily)
-                .filter_by(ins_code=ins_code)
+                .filter_by(ins_code=ins_code, record_date=today)
                 .order_by(ClosingPriceDaily.record_date.desc())
                 .first()
             )
 
             if not snap or not closing or not snap.nav_red or not closing.p_closing:
-                print(f"  ⚠️ Skipping {name}: missing data")
+                print(f"  ⚠️ Skipping {name}: missing today's data")
                 continue
 
             market = closing.p_closing
